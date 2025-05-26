@@ -20,6 +20,7 @@ const fishSchema = new Schema(
       ref: "User",
       required: true,
     },
+    model: { type: String, default: "VitTransformer" }
   },
   { timestamps: true }
 );

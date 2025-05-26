@@ -57,6 +57,8 @@ from torchvision import transforms
 from PIL import Image
 import requests
 from io import BytesIO
+import tensorflow as tf
+import numpy as np
 
 # Load model architecture (must match how it was saved)
 from transformers import ViTForImageClassification, ViTImageProcessor
@@ -76,6 +78,23 @@ preprocess = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.5]*3, std=[0.5]*3)
 ])
+
+
+# --- ResNet50 Setup ---
+
+# Load ResNet50 Keras model
+resnet_model = tf.keras.models.load_model("fish_classifier_resnet50.h5")
+
+# ResNet50 Class labels (same as above)
+resnet_class_names = ['Catla', 'Cyprinus carpio', 'Grass Carp', 'Mori', 'Rohu', 'Silver']
+
+# ResNet50 Preprocessing
+def preprocess_resnet_image(image: Image.Image):
+    image = image.resize((224, 224))
+    image_array = np.array(image) / 255.0  # Normalize to [0, 1]
+    image_array = np.expand_dims(image_array, axis=0)  # Add batch dimension
+    return image_array
+
 
 # FastAPI app
 app = FastAPI()
@@ -110,6 +129,7 @@ def predict(input: ImageInput, Authorization: str = Header(...)):
             confidence, predicted = torch.max(probs, dim=1)
 
         return {
+             "model": "VitTransformer",
             "species": class_names[predicted.item()],
             "confidence": round(confidence.item(), 4),
             "all_predictions": {class_names[i]: round(p.item(), 4) for i, p in enumerate(probs[0])}
@@ -118,3 +138,26 @@ def predict(input: ImageInput, Authorization: str = Header(...)):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
+
+
+@app.post("/predict/model2")
+def predict_resnet(input: ImageInput, Authorization: str = Header(...)):
+    try:
+        response = requests.get(input.image_url)
+        image = Image.open(BytesIO(response.content)).convert("RGB")
+
+        input_tensor = preprocess_resnet_image(image)
+
+        prediction = resnet_model.predict(input_tensor)[0]
+        predicted_idx = np.argmax(prediction)
+        confidence = float(prediction[predicted_idx])
+
+        return {
+            "model": "resnet50",
+            "species": resnet_class_names[predicted_idx],
+            "confidence": round(confidence, 4),
+            "all_predictions": {resnet_class_names[i]: round(float(p), 4) for i, p in enumerate(prediction)}
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"ResNet50 prediction failed: {str(e)}")

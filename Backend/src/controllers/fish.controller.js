@@ -46,3 +46,35 @@ export const getUserFishPredictions = asyncHandler(async (req, res) => {
   res.status(200).json(new ApiResponse(200, fishList));
   
 });
+export const uploadFishAndPredict2 = asyncHandler(async (req, res) => {
+  const image = req.file?.path;
+  if (!image) throw new ApiError(400, "Fish image is required");
+
+  const uploadedImage = await uploadOnCloudinary(image);
+  if (!uploadedImage) throw new ApiError(500, "Failed to upload fish image");
+
+  console.log("Calling FastAPI /predict/model2 with:", uploadedImage.url);
+
+  const { data } = await axios.post(
+    "http://localhost:8001/predict/model2",
+    { image_url: uploadedImage.url },
+    {
+      headers: {
+        Authorization: `Bearer ${req.cookies.accessToken}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  const savedFish = await Fish.create({
+    species: data.species,
+    confidence: data.confidence,
+    imageUrl: uploadedImage.url,
+    uploadedBy: req.user._id,
+    model: "resnet50"  // ✅ Save model name
+  });
+
+  res
+    .status(201)
+    .json(new ApiResponse(200, savedFish, "Prediction from Model 2 complete"));
+});

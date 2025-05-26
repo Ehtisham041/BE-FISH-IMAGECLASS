@@ -72,3 +72,4 @@ env/
 
 # Ignore large model
 Backend/src/fastapi/best_vit_model.pth
+Backend/src/fastapi/fish_classifier_resnet50.h5
